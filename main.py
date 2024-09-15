@@ -1,6 +1,6 @@
 import os
 import sys
-
+import time
 import pandas as pd
 from datetime import datetime
 import hashlib
@@ -106,7 +106,7 @@ if __name__ == "__main__":
         if action.lower() == "c":
             folder_path = input("Enter the folder path to search for duplicates:\n")
             duplicates = find_duplicates(folder_path)
-            if duplicates:
+            if duplicates is not None:
                 save_to_excel(duplicates, folder_path)
 
         if action.lower() == "d":
@@ -122,4 +122,5 @@ if __name__ == "__main__":
 
         if proceed.lower() == "e":
             print("Script is finished")
+            time.sleep(5)
             sys.exit(0)
