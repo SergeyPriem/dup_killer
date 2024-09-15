@@ -1,10 +1,10 @@
+import hashlib
 import os
 import sys
 import time
-import pandas as pd
 from datetime import datetime
-import hashlib
-from multiprocessing import Pool
+
+import pandas as pd
 
 
 def tm(func):
@@ -12,22 +12,22 @@ def tm(func):
         start_time = time.time()
         result = func(*args, **kwargs)
         end_time = time.time()
-        print(f"Execution time of {func.__name__}: {end_time - start_time:.6f} seconds")
+        print(f"Execution time of {func.__name__}: {end_time - start_time:.2f} seconds")
         return result
 
     return wrapper
 
 
-def file_checksum(file_path):
-    hash_md5 = hashlib.md5()
-    try:
-        with open(file_path, "rb") as f:
-            for chunk in iter(lambda: f.read(4096), b""):
-                hash_md5.update(chunk)
-    except IOError:
-        print(f"Can't open: {file_path}")
-        return None
-    return hash_md5.hexdigest()
+# def file_checksum(file_path):
+#     hash_md5 = hashlib.md5()
+#     try:
+#         with open(file_path, "rb") as f:
+#             for chunk in iter(lambda: f.read(4096), b""):
+#                 hash_md5.update(chunk)
+#     except IOError:
+#         print(f"Can't open: {file_path}")
+#         return None
+#     return hash_md5.hexdigest()
 
 
 #####################################################################################################
@@ -77,6 +77,20 @@ def file_checksum(file_path):
 #     print(f"\nDuplicates search complete. {processed_files} files processed\n")
 #
 #     return duplicates
+
+
+def file_checksum(file_path):
+    hash_md5 = hashlib.md5()
+    try:
+        with open(file_path, "rb") as f:
+            for chunk in iter(lambda: f.read(4096), b""):
+                hash_md5.update(chunk)
+    except IOError:
+        print(f"Can't open: {file_path}")
+        return None
+    return hash_md5.hexdigest()
+
+
 @tm
 def find_duplicates(folder_path):
     if not os.path.isdir(folder_path):
@@ -116,15 +130,66 @@ def find_duplicates(folder_path):
     duplicates['Master'] = duplicates.groupby(['Group_Number'])['File Name'].transform(
         lambda x: x == x.loc[x.str.len().idxmin()])
     print("\nProcessing files' checksum...")
-    # Use multiprocessing to calculate checksums in parallel
-    with Pool() as pool:
-        duplicates['Check_Sum'] = pool.map(file_checksum, duplicates['File Path'])
+
+    # Calculate checksums in parallel
+    duplicates['Check_Sum'] = [file_checksum(file_path) for file_path in duplicates['File Path']]
 
     duplicates.sort_values(by=['Group_Number'], inplace=True, ascending=False)
 
-    print("Duplicates search complete\n")
+    print("\nDuplicates search complete\n")
 
     return duplicates
+
+
+# @tm
+# def find_duplicates(folder_path):
+#     if not os.path.isdir(folder_path):
+#         print(f"Folder {folder_path} not found...")
+#         return
+#
+#     data = []
+#     total_files = sum([len(files) for r, d, files in os.walk(folder_path)])
+#     processed_files = 0
+#
+#     for root, _, files in os.walk(folder_path):
+#         for file in files:
+#             file_path = os.path.join(root, file)
+#             if len(file_path) >= 260:
+#                 file_path = f"\\\\?\\{file_path}"
+#             try:
+#                 file_size = os.path.getsize(file_path)
+#             except FileNotFoundError:
+#                 print(f"File not found: {file_path}")
+#                 continue
+#             file_ext = os.path.splitext(file)[1]
+#             data.append([file_size, file_ext, file_path, file])
+#
+#             processed_files += 1
+#             progress = (processed_files / total_files) * 100
+#             sys.stdout.write(f"\rProgress: {progress:.2f} %")
+#             sys.stdout.flush()
+#
+#     df = pd.DataFrame(data, columns=['Size', 'Extension', 'File Path', 'File Name'])
+#
+#     duplicates = df[df.duplicated(subset=['Size', 'Extension'], keep=False)].copy()
+#
+#     # Add a unique number to each group
+#     duplicates['Group_Number'] = duplicates.groupby(['Size', 'Extension']).ngroup()
+#
+#     # Mark the file with the shortest name as 'master'
+#     duplicates['Master'] = duplicates.groupby(['Group_Number'])['File Name'].transform(
+#         lambda x: x == x.loc[x.str.len().idxmin()])
+#     print("\nProcessing files' checksum...")
+#     # Use multiprocessing to calculate checksums in parallel
+#     if __name__ == "__main__":
+#         with Pool() as pool:
+#             duplicates['Check_Sum'] = pool.map(file_checksum, duplicates['File Path'])
+#
+#     duplicates.sort_values(by=['Group_Number'], inplace=True, ascending=False)
+#
+#     print("Duplicates search complete\n")
+#
+#     return duplicates
 
 
 #################################################################################################
@@ -133,7 +198,7 @@ def save_to_excel(duplicates_to_save, output_folder):
     now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_file = os.path.join(output_folder, f"duplicates_{now}.xlsx")
     duplicates_to_save.to_excel(output_file, index=False)
-    print(f"Excel file saved to {output_file}")
+    print(f"Excel file saved to \n{output_file}")
 
 
 def delete_duplicates():
@@ -189,18 +254,22 @@ if __name__ == "__main__":
             folder_path = input("Enter the folder path to search for duplicates:\n")
             duplicates = find_duplicates(folder_path)
             if duplicates is not None:
-                save_to_excel(duplicates, folder_path)
+                if isinstance(duplicates, pd.DataFrame):
+                    if len(duplicates):
+                        save_to_excel(duplicates, folder_path)
+                    else:
+                        print("No duplicates found in the specified folder")
+            else:
+                print("Something went wrong...")
+                time.sleep(5)
 
         if action.lower() == "d":
-            print("under development")
             delete_duplicates()
 
         if action.lower() not in ["c", "d"]:
-            print("Invalid action. Please try again.")
+            print("Invalid action. Please try again\n")
 
-        proceed = input("""Select the action:
-        any key (excluding e) - proceed
-        e - exit\n""")
+        proceed = input("Select the action:\ne - exit\nanother key - proceed\n")
 
         if proceed.lower() == "e":
             print("Script is finished")
