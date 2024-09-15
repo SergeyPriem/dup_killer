@@ -4,6 +4,18 @@ import time
 import pandas as pd
 from datetime import datetime
 import hashlib
+from multiprocessing import Pool
+
+
+def tm(func):
+    def wrapper(*args, **kwargs):
+        start_time = time.time()
+        result = func(*args, **kwargs)
+        end_time = time.time()
+        print(f"Execution time of {func.__name__}: {end_time - start_time:.6f} seconds")
+        return result
+
+    return wrapper
 
 
 def file_checksum(file_path):
@@ -18,34 +30,106 @@ def file_checksum(file_path):
     return hash_md5.hexdigest()
 
 
+#####################################################################################################
+@tm
 def find_duplicates(folder_path):
-
     if not os.path.isdir(folder_path):
         print(f"Folder {folder_path} not found...")
         return
 
     data = []
+    total_files = sum([len(files) for r, d, files in os.walk(folder_path)])
+    processed_files = 0
+
     for root, _, files in os.walk(folder_path):
         for file in files:
             file_path = os.path.join(root, file)
-            file_size = os.path.getsize(file_path)
+            if len(file_path) >= 260:
+                file_path = f"\\\\?\\{file_path}"
+            try:
+                file_size = os.path.getsize(file_path)
+            except FileNotFoundError:
+                print(f"File not found: {file_path}")
+                continue
             file_ext = os.path.splitext(file)[1]
             data.append([file_size, file_ext, file_path, file])
+
+            processed_files += 1
+            progress = (processed_files / total_files) * 100
+            sys.stdout.write(f"\rProgress: {progress:.2f} %")
+            sys.stdout.flush()
+    print("\n")
 
     df = pd.DataFrame(data, columns=['Size', 'Extension', 'File Path', 'File Name'])
 
     duplicates = df[df.duplicated(subset=['Size', 'Extension'], keep=False)].copy()
 
-    # Mark the file with the shortest name as 'master'
-    duplicates['Master'] = duplicates.groupby(['Size', 'Extension'])['File Name'].transform(
-        lambda x: x == x.loc[x.str.len().idxmin()])
+    # Add a unique number to each group
+    duplicates['Group_Number'] = duplicates.groupby(['Size', 'Extension']).ngroup()
 
+    # Mark the file with the shortest name as 'master'
+    duplicates['Master'] = duplicates.groupby(['Group_Number'])['File Name'].transform(
+        lambda x: x == x.loc[x.str.len().idxmin()])
+    print("\nProcessing files' checksum...")
     duplicates['Check_Sum'] = duplicates['File Path'].apply(file_checksum)
 
-    duplicates.sort_values(by=['Size'], inplace=True, ascending=False)
+    duplicates.sort_values(by=['Group_Number'], inplace=True, ascending=False)
+
+    print(f"\nDuplicates search complete. {processed_files} files processed\n")
 
     return duplicates
 
+
+#def find_duplicates(folder_path):
+#    if not os.path.isdir(folder_path):
+#        print(f"Folder {folder_path} not found...")
+#        return
+#
+#    data = []
+#    total_files = sum([len(files) for r, d, files in os.walk(folder_path)])
+#    processed_files = 0
+#
+#    for root, _, files in os.walk(folder_path):
+#        for file in files:
+#            file_path = os.path.join(root, file)
+#            if len(file_path) >= 260:
+#                file_path = f"\\\\?\\{file_path}"
+#            try:
+#                file_size = os.path.getsize(file_path)
+#            except FileNotFoundError:
+#                print(f"File not found: {file_path}")
+#                continue
+#            file_ext = os.path.splitext(file)[1]
+#            data.append([file_size, file_ext, file_path, file])
+#
+#            processed_files += 1
+#            progress = (processed_files / total_files) * 100
+#            sys.stdout.write(f"\rProgress: {progress:.2f} %")
+#            sys.stdout.flush()
+#    print("\n")
+#
+#    df = pd.DataFrame(data, columns=['Size', 'Extension', 'File Path', 'File Name'])
+#
+#    duplicates = df[df.duplicated(subset=['Size', 'Extension'], keep=False)].copy()
+#
+#    # Add a unique number to each group
+#    duplicates['Group_Number'] = duplicates.groupby(['Size', 'Extension']).ngroup()
+#
+#    # Mark the file with the shortest name as 'master'
+#    duplicates['Master'] = duplicates.groupby(['Group_Number'])['File Name'].transform(
+#        lambda x: x == x.loc[x.str.len().idxmin()])
+#
+#    # Use multiprocessing to calculate checksums in parallel
+#    with Pool() as pool:
+#        duplicates['Check_Sum'] = pool.map(file_checksum, duplicates['File Path'])
+#
+#    duplicates.sort_values(by=['Group_Number'], inplace=True, ascending=False)
+#
+#    print("Duplicates search complete\n")
+#
+#    return duplicates
+#
+#################################################################################################
 
 def save_to_excel(duplicates_to_save, output_folder):
     now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
@@ -75,7 +159,7 @@ def delete_duplicates():
     # Iterate through each group
     for (size, extension), group in grouped:
         # Identify the master file
-        master_file = group[group['Master'] is True]
+        master_file = group[group['Master'] == True]
         if master_file.empty:
             continue
         master_checksum = master_file['Check_Sum'].values[0]
@@ -117,7 +201,7 @@ if __name__ == "__main__":
             print("Invalid action. Please try again.")
 
         proceed = input("""Select the action:
-        p - proceed
+        any key (excluding e) - proceed
         e - exit\n""")
 
         if proceed.lower() == "e":
