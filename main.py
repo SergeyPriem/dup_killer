@@ -1,4 +1,6 @@
 import os
+import sys
+
 import pandas as pd
 from datetime import datetime
 import hashlib
@@ -47,7 +49,69 @@ def save_to_excel(duplicates, output_folder):
     print(f"Excel file saved to {output_file}")
 
 
+def delete_duplicates():
+    excel_path = input("Enter the path to the file with duplicates:\n")
+    # Load the Excel table
+
+    if not os.path.isfile(excel_path):
+        print(f"File {excel_path} not found...")
+        sys.exit(1)
+
+    df = pd.read_excel(excel_path)
+
+    # Group files by Size and Extension
+    grouped = df.groupby(['Size', 'Extension'])
+
+    # Initialize total size counter
+    total_deleted_size = 0
+
+    # Iterate through each group
+    for (size, extension), group in grouped:
+        # Identify the master file
+        master_file = group[group['Master'] == True]
+        if master_file.empty:
+            continue
+        master_checksum = master_file['Check_Sum'].values[0]
+
+        # Iterate through files in the group
+        for index, row in group.iterrows():
+            if not row['Master'] and row['Check_Sum'] == master_checksum:
+                file_path = row['File Path']
+                try:
+                    file_size = os.path.getsize(file_path)
+                    os.remove(file_path)
+                    total_deleted_size += file_size
+                    print(f"Deleted: {file_path} (Size: {file_size} bytes)")
+                except OSError as e:
+                    print(f"Error deleting {file_path}: {e}")
+
+    total_deleted_size_mb = total_deleted_size / (1024 * 1024)
+    print(f"Total size of deleted files: {total_deleted_size_mb:.2f} MB")
+
+
 if __name__ == "__main__":
-    folder_path = input("Enter the folder path to search for duplicates: ")
-    duplicates = find_duplicates(folder_path)
-    save_to_excel(duplicates, folder_path)
+
+    while True:
+        action = input("""Select action:
+        c - create file of duplicates
+        d - delete duplicates based on reviewed file\n""")
+
+        if action.lower() == "c":
+            folder_path = input("Enter the folder path to search for duplicates:\n")
+            if not os.path.isdir(folder_path):
+                print(f"Folder {folder_path} not found...")
+                sys.exit(1)
+            duplicates = find_duplicates(folder_path)
+            save_to_excel(duplicates, folder_path)
+
+        if action.lower() == "d":
+            print("under development")
+            delete_duplicates()
+
+        proceed = input("""Select the action:
+        p - proceed
+        e - exit\n""")
+
+        if proceed.lower() == "e":
+            print("Script is finished")
+            sys.exit(0)
