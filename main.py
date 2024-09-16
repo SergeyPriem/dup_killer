@@ -18,67 +18,6 @@ def tm(func):
     return wrapper
 
 
-# def file_checksum(file_path):
-#     hash_md5 = hashlib.md5()
-#     try:
-#         with open(file_path, "rb") as f:
-#             for chunk in iter(lambda: f.read(4096), b""):
-#                 hash_md5.update(chunk)
-#     except IOError:
-#         print(f"Can't open: {file_path}")
-#         return None
-#     return hash_md5.hexdigest()
-
-
-#####################################################################################################
-# @tm
-# def find_duplicates(folder_path):
-#     if not os.path.isdir(folder_path):
-#         print(f"Folder {folder_path} not found...")
-#         return
-#
-#     data = []
-#     total_files = sum([len(files) for r, d, files in os.walk(folder_path)])
-#     processed_files = 0
-#
-#     for root, _, files in os.walk(folder_path):
-#         for file in files:
-#             file_path = os.path.join(root, file)
-#             if len(file_path) >= 260:
-#                 file_path = f"\\\\?\\{file_path}"
-#             try:
-#                 file_size = os.path.getsize(file_path)
-#             except FileNotFoundError:
-#                 print(f"File not found: {file_path}")
-#                 continue
-#             file_ext = os.path.splitext(file)[1]
-#             data.append([file_size, file_ext, file_path, file])
-#
-#             processed_files += 1
-#             progress = (processed_files / total_files) * 100
-#             sys.stdout.write(f"\rProgress: {progress:.2f} %")
-#             sys.stdout.flush()
-#
-#     df = pd.DataFrame(data, columns=['Size', 'Extension', 'File Path', 'File Name'])
-#
-#     duplicates = df[df.duplicated(subset=['Size', 'Extension'], keep=False)].copy()
-#
-#     # Add a unique number to each group
-#     duplicates['Group_Number'] = duplicates.groupby(['Size', 'Extension']).ngroup()
-#
-#     # Mark the file with the shortest name as 'master'
-#     duplicates['Master'] = duplicates.groupby(['Group_Number'])['File Name'].transform(
-#         lambda x: x == x.loc[x.str.len().idxmin()])
-#     print("\nProcessing files' checksum...")
-#     duplicates['Check_Sum'] = duplicates['File Path'].apply(file_checksum)
-#
-#     duplicates.sort_values(by=['Group_Number'], inplace=True, ascending=False)
-#
-#     print(f"\nDuplicates search complete. {processed_files} files processed\n")
-#
-#     return duplicates
-
-
 def file_checksum(file_path):
     hash_md5 = hashlib.md5()
     try:
@@ -141,63 +80,23 @@ def find_duplicates(folder_path):
     return duplicates
 
 
-# @tm
-# def find_duplicates(folder_path):
-#     if not os.path.isdir(folder_path):
-#         print(f"Folder {folder_path} not found...")
-#         return
-#
-#     data = []
-#     total_files = sum([len(files) for r, d, files in os.walk(folder_path)])
-#     processed_files = 0
-#
-#     for root, _, files in os.walk(folder_path):
-#         for file in files:
-#             file_path = os.path.join(root, file)
-#             if len(file_path) >= 260:
-#                 file_path = f"\\\\?\\{file_path}"
-#             try:
-#                 file_size = os.path.getsize(file_path)
-#             except FileNotFoundError:
-#                 print(f"File not found: {file_path}")
-#                 continue
-#             file_ext = os.path.splitext(file)[1]
-#             data.append([file_size, file_ext, file_path, file])
-#
-#             processed_files += 1
-#             progress = (processed_files / total_files) * 100
-#             sys.stdout.write(f"\rProgress: {progress:.2f} %")
-#             sys.stdout.flush()
-#
-#     df = pd.DataFrame(data, columns=['Size', 'Extension', 'File Path', 'File Name'])
-#
-#     duplicates = df[df.duplicated(subset=['Size', 'Extension'], keep=False)].copy()
-#
-#     # Add a unique number to each group
-#     duplicates['Group_Number'] = duplicates.groupby(['Size', 'Extension']).ngroup()
-#
-#     # Mark the file with the shortest name as 'master'
-#     duplicates['Master'] = duplicates.groupby(['Group_Number'])['File Name'].transform(
-#         lambda x: x == x.loc[x.str.len().idxmin()])
-#     print("\nProcessing files' checksum...")
-#     # Use multiprocessing to calculate checksums in parallel
-#     if __name__ == "__main__":
-#         with Pool() as pool:
-#             duplicates['Check_Sum'] = pool.map(file_checksum, duplicates['File Path'])
-#
-#     duplicates.sort_values(by=['Group_Number'], inplace=True, ascending=False)
-#
-#     print("Duplicates search complete\n")
-#
-#     return duplicates
 
 
-#################################################################################################
 
 def save_to_excel(duplicates_to_save, output_folder):
     now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
     output_file = os.path.join(output_folder, f"duplicates_{now}.xlsx")
-    duplicates_to_save.to_excel(output_file, index=False)
+    try:
+        duplicates_to_save.to_excel(output_file, index=False)
+    except:
+        print("Can't save file in selected path. Enter another path")
+        new_path=input()
+        now = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        if not os.path.isdir(new_path):
+            print(f"Folder {new_path} not found...")
+            return
+        output_file = os.path.join(output_folder, f"duplicates_{now}.xlsx")
+        duplicates_to_save.to_excel(output_file, index=False)
     print(f"Excel file saved to \n{output_file}")
 
 
